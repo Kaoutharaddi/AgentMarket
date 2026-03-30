@@ -1,0 +1,17 @@
+{
+  "attestation_mock": true,
+  "guest_image_id": [
+    3333035144,
+    1928263394,
+    2185294439,
+    1767633858,
+    3516011340,
+    309889704,
+    416244229,
+    1259241061
+  ],
+  "job_id": "test-job-001",
+  "proof_path": "proof_test-job-001.bin",
+  "proof_size_bytes": 265,
+  "result_hash": "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"
+}

@@ -1,0 +1,75 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://agentmarket.io/schemas/jobspec/v1.0.json",
+    "title": "AgentMarket JobSpec v1.0",
+    "type": "object",
+    "required": [
+      "schema_version", "job_id", "title", "job_type",
+      "inputs", "expected_output_hash",
+      "timeout_seconds", "created_at"
+    ],
+    "properties": {
+      "schema_version": { "type": "string", "const": "1.0" },
+      "job_id":         { "type": "string", "format": "uuid" },
+      "title":          { "type": "string", "minLength": 1, "maxLength": 120 },
+      "job_type":       { "type": "string", "enum": ["code_test", "classification", "extraction"] },
+      "inputs": {
+        "type": "object",
+        "required": ["ipfs_url", "sha256"],
+        "properties": {
+          "ipfs_url": { "type": "string", "pattern": "^ipfs://" },
+          "sha256":   { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+        },
+        "additionalProperties": false
+      },
+      "expected_output_hash": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "SHA-256 hex del output esperado. Almacenado on-chain como output_hash."
+      },
+      "timeout_seconds": { "type": "integer", "minimum": 10, "maximum": 86400 },
+      "created_at":      { "type": "string", "format": "date-time" },
+  
+      "test_suite": {
+        "type": "object",
+        "required": ["ipfs_url", "sha256", "runner"],
+        "properties": {
+          "ipfs_url": { "type": "string", "pattern": "^ipfs://" },
+          "sha256":   { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "runner":   { "type": "string", "enum": ["pytest", "jest"] }
+        },
+        "additionalProperties": false
+      },
+      "categories": {
+        "type": "array",
+        "items": { "type": "string", "minLength": 1 },
+        "minItems": 2,
+        "uniqueItems": true
+      },
+      "min_confidence": {
+        "type": "number",
+        "minimum": 0.0,
+        "maximum": 1.0
+      },
+      "fields_to_extract": {
+        "type": "array",
+        "items": { "type": "string", "minLength": 1 },
+        "minItems": 1,
+        "uniqueItems": true
+      },
+      "output_format": {
+        "type": "string",
+        "enum": ["json", "csv"]
+      }
+    },
+  
+    "if":   { "properties": { "job_type": { "const": "code_test" } } },
+    "then": { "required": ["test_suite"] },
+    "else": {
+      "if":   { "properties": { "job_type": { "const": "classification" } } },
+      "then": { "required": ["categories", "min_confidence"] },
+      "else": { "required": ["fields_to_extract", "output_format"] }
+    },
+  
+    "additionalProperties": false
+  }

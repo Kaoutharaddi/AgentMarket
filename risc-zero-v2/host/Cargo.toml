@@ -1,0 +1,45 @@
+[package]
+name    = "agentmarket-audit-host"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "agentmarket-audit-host"
+path = "src/main.rs"
+
+# risc0-build busca esta sección para compilar el guest y embeber ELF + image_id
+[package.metadata.risc0]
+methods = ["../methods/guest"]
+
+[dependencies]
+# Crate compartido con AuditInput / AuditJournal
+agentmarket-audit-shared = { path = "../shared" }
+
+# RISC Zero — solo el host necesita el prover completo
+risc0-zkvm = { version = "3.0", features = ["prove"] }
+
+# CLI
+clap    = { version = "4.5", features = ["derive"] }
+
+# Manejo de errores
+anyhow  = "1.0"
+
+# Encoding
+hex     = "0.4"
+bs58    = "0.5"
+
+# Serialización del receipt para medir su tamaño
+bincode = "1.3"
+
+# JSON output
+serde_json = "1.0"
+serde      = { version = "1.0", features = ["derive"] }
+
+# Logging de risc0
+tracing            = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[build-dependencies]
+# risc0-build genera AGENTMARKET_AUDIT_GUEST_ELF y AGENTMARKET_AUDIT_GUEST_ID
+# a partir del crate guest en tiempo de compilación del host.
+risc0-build = "3.0"

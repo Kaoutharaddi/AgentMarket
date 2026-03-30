@@ -1,0 +1,12 @@
+[package]
+name    = "agentmarket-audit-guest"
+version = "0.1.0"
+edition = "2021"
+
+# El guest vive en su propio workspace (requerido por risc0-build)
+[workspace]
+
+[dependencies]
+risc0-zkvm = { version = "1.0", default-features = false, features = ["std"] }
+sha2       = "0.10"
+serde      = { version = "1.0", features = ["derive"] }

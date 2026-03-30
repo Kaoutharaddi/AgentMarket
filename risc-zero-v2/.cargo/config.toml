@@ -1,0 +1,5 @@
+[env]
+# Las librerías precompiladas de risc0 (ring, liblzma, nvtx) se compilan
+# contra macOS 26.x. Sin esto el linker las ve como "newer than being linked"
+# y puede fallar con símbolos no encontrados.
+MACOSX_DEPLOYMENT_TARGET = "14.0"

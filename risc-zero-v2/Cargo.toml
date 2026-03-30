@@ -1,0 +1,13 @@
+[workspace]
+members = [
+    "methods",
+    "methods/guest",
+    "host",
+]
+resolver = "2"
+
+[profile.release]
+opt-level = 3
+
+[profile.release.build-override]
+opt-level = 3

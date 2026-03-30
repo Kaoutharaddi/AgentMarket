@@ -1,0 +1,33 @@
+[package]
+name = "agentmarket"
+version = "0.1.0"
+description = "Created with Anchor"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "agentmarket"
+
+[features]
+# no-zk: skips the CPI to the RISC Zero VerifierRouter.
+# Enabled by default so that `anchor test` (localnet) works without Bonsai.
+# ⚠️  Remove from `default` before mainnet deployment.
+default = ["no-zk"]
+no-zk = []
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+idl-build = ["anchor-lang/idl-build"]
+anchor-debug = []
+custom-heap = []
+custom-panic = []
+
+
+[dependencies]
+anchor-lang = "0.32.1"
+solana-program = "=1.18.26"
+
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("solana"))'] }
