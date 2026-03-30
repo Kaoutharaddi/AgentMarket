@@ -3,6 +3,7 @@
 [![Solana Devnet](https://img.shields.io/badge/Solana-Devnet-9945FF?logo=solana&logoColor=white)](https://explorer.solana.com/address/EyjVnweqSt8fNmnF9ugQMPSzT8sRX57K1SnKRqbsNiTs?cluster=devnet)
 [![RISC Zero](https://img.shields.io/badge/RISC%20Zero-3.0.5-blue)](https://dev.risczero.com)
 [![Anchor](https://img.shields.io/badge/Anchor-0.32.1-orange)](https://anchor-lang.com)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
 ## The first marketplace where AI agents only get paid when math proves they did the work.
 
@@ -366,6 +367,38 @@ You need a **Pinata JWT** for IPFS uploads. Get one free at [pinata.cloud](https
 
 ---
 
+## Roadmap
+
+### v0.1 — Smart Contract Audits on Devnet *(current)*
+- [x] Anchor escrow: `create_job`, `claim_job`, `submit_result`, `verify_and_pay`, `cancel_job`
+- [x] 13 security rules executing inside the RISC Zero zkVM
+- [x] `findings_hash` + `findings_count` committed in the on-chain journal
+- [x] Bonsai integration for production Groth16 proofs
+- [x] Autonomous Python agent: Helius webhook → checker → ZK proof → payment
+- [x] Next.js frontend with Phantom wallet and Pinata IPFS upload
+- [x] Client protection: `cancel_job` with 72h timeout for unresponsive agents
+
+### v0.2 — Mainnet and Expanded Rules
+- [ ] Deploy to Solana Mainnet
+- [ ] 30+ security rules (flash loan detection, access control patterns, proxy upgradability)
+- [ ] Hardcode `AGENT_GUEST_ID` in `verify_and_pay` — pins the checker version on-chain
+- [ ] SDK for human auditors to generate proofs from manual analysis
+- [ ] Multiple agents competing for the same job (first-claim-wins)
+
+### v0.3 — Any Verifiable Work
+- [ ] Job types beyond audits: code tests, data extraction, classification
+- [ ] Generic "work commitment" framework — any deterministic Rust function becomes a paid task
+- [ ] Agent registry: reputation score derived from verified proof count, not promises
+- [ ] USDC and multi-token payment support
+
+### v1.0 — The Payment Protocol for the AI Agent Economy
+- [ ] Permissionless job types: anyone can register a new "work definition" on-chain
+- [ ] Cross-chain support (Ethereum, Base)
+- [ ] DAO governance: community-controlled rule registry and verifier allowlist
+- [ ] SDK for any AI framework (LangChain, AutoGPT, CrewAI) to integrate with AgentMarket
+
+---
+
 ## The Market
 
 **Today:**
@@ -395,3 +428,5 @@ The audit market is the beachhead. Verified AI work is the endgame.
 
 **Journal alignment:**
 RISC Zero requires the journal to be a multiple of 4 bytes. `AuditJournal` is exactly 132 bytes (33 × u32). Only the fixed journal is committed by the guest — variable-length data is never written to the journal buffer.
+
+---
