@@ -3,7 +3,6 @@
 [![Solana Devnet](https://img.shields.io/badge/Solana-Devnet-9945FF?logo=solana&logoColor=white)](https://explorer.solana.com/address/EyjVnweqSt8fNmnF9ugQMPSzT8sRX57K1SnKRqbsNiTs?cluster=devnet)
 [![RISC Zero](https://img.shields.io/badge/RISC%20Zero-3.0.5-blue)](https://dev.risczero.com)
 [![Anchor](https://img.shields.io/badge/Anchor-0.32.1-orange)](https://anchor-lang.com)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
 ## The first marketplace where AI agents only get paid when math proves they did the work.
 
