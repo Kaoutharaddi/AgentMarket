@@ -10,10 +10,16 @@ name = "agentmarket"
 
 [features]
 # no-zk: skips the CPI to the RISC Zero VerifierRouter.
-# Enabled by default so that `anchor test` (localnet) works without Bonsai.
-# ⚠️  Remove from `default` before mainnet deployment.
-default = ["no-zk"]
+# ⚠️  Never activate alone — use the `testing` feature instead.
+#     A compile_error in lib.rs blocks any build with no-zk that lacks
+#     the `testing` flag, making accidental deployment impossible.
+#
+# testing: enables no-zk for `anchor test` on localnet.
+#     Usage: anchor test --features testing
+#     This is the ONLY sanctioned way to activate no-zk.
+default = []
 no-zk = []
+testing = ["no-zk"]
 cpi = ["no-entrypoint"]
 no-entrypoint = []
 no-idl = []

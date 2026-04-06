@@ -23,7 +23,10 @@ pub enum Severity {
 /// Ejecuta todas las reglas sobre `source` y retorna los findings.
 pub fn run_checks(source: &str) -> Vec<Finding> {
     let mut findings = Vec::new();
-    for (i, raw_line) in source.lines().enumerate() {
+    // Pre-collect so we can look ahead (SOL-005) and look behind (RS-003).
+    let lines: Vec<&str> = source.lines().collect();
+
+    for (i, raw_line) in lines.iter().enumerate() {
         let line_no = (i + 1) as u32;
         let line = raw_line.trim();
         // Skip comments
@@ -75,17 +78,26 @@ pub fn run_checks(source: &str) -> Vec<Finding> {
             });
         }
 
-        // HIGH: unchecked return value from low-level call
-        if (line.contains(".send(") || line.contains(".call("))
-            && !line.contains("require(")
-            && !line.contains("bool ")
-        {
-            findings.push(Finding {
-                rule: "SOL-005: unchecked low-level call return".to_string(),
-                line: line_no,
-                severity: Severity::High,
-                snippet: truncate(line),
-            });
+        // HIGH: unchecked return value from low-level call.
+        // The require() / bool check may appear on the same line OR on either
+        // of the next 2 lines (e.g. `bool ok = addr.send(v);` split across
+        // lines, or `require(ok, "failed");` immediately after).
+        if line.contains(".send(") || line.contains(".call(") {
+            let window_end = (i + 3).min(lines.len());
+            let window_has_check = lines[i..window_end]
+                .iter()
+                .any(|l| {
+                    let t = l.trim();
+                    t.contains("require(") || t.contains("bool ")
+                });
+            if !window_has_check {
+                findings.push(Finding {
+                    rule: "SOL-005: unchecked low-level call return".to_string(),
+                    line: line_no,
+                    severity: Severity::High,
+                    snippet: truncate(line),
+                });
+            }
         }
 
         // MEDIUM: block.timestamp used for logic (miner manipulation)
@@ -156,14 +168,20 @@ pub fn run_checks(source: &str) -> Vec<Finding> {
             });
         }
 
-        // CRITICAL: missing signer check on mutable account
-        if line.contains("UncheckedAccount") && !line.contains("/// CHECK:") {
-            findings.push(Finding {
-                rule: "RS-003: UncheckedAccount without CHECK comment".to_string(),
-                line: line_no,
-                severity: Severity::Critical,
-                snippet: truncate(line),
-            });
+        // CRITICAL: UncheckedAccount without safety comment.
+        // Anchor allows `/// CHECK:` on the line immediately before the field
+        // declaration, so we inspect both the current line and line i-1.
+        if line.contains("UncheckedAccount") {
+            let prev_has_check = i > 0 && lines[i - 1].trim().contains("/// CHECK:");
+            let curr_has_check = line.contains("/// CHECK:");
+            if !curr_has_check && !prev_has_check {
+                findings.push(Finding {
+                    rule: "RS-003: UncheckedAccount without CHECK comment".to_string(),
+                    line: line_no,
+                    severity: Severity::Critical,
+                    snippet: truncate(line),
+                });
+            }
         }
 
         // MEDIUM: owner not validated
@@ -187,6 +205,92 @@ pub fn run_checks(source: &str) -> Vec<Finding> {
         }
     }
     findings
+}
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn has_rule(findings: &[Finding], rule_prefix: &str) -> bool {
+        findings.iter().any(|f| f.rule.starts_with(rule_prefix))
+    }
+
+    // ── SOL-005 ───────────────────────────────────────────────────────────────
+
+    /// require() en la MISMA línea → no debe disparar SOL-005.
+    #[test]
+    fn sol005_no_finding_when_require_same_line() {
+        let src = r#"require(addr.send(amount), "failed");"#;
+        assert!(!has_rule(&run_checks(src), "SOL-005"));
+    }
+
+    /// bool en la MISMA línea → no debe disparar SOL-005.
+    #[test]
+    fn sol005_no_finding_when_bool_same_line() {
+        let src = r#"bool ok = addr.send(amount);"#;
+        assert!(!has_rule(&run_checks(src), "SOL-005"));
+    }
+
+    /// require() en la línea SIGUIENTE → no debe disparar SOL-005.
+    #[test]
+    fn sol005_no_finding_when_require_next_line() {
+        let src = "addr.send(amount);\nrequire(ok, \"failed\");";
+        assert!(!has_rule(&run_checks(src), "SOL-005"), "require on next line should suppress SOL-005");
+    }
+
+    /// bool en 2 líneas más adelante → no debe disparar SOL-005.
+    #[test]
+    fn sol005_no_finding_when_bool_two_lines_ahead() {
+        let src = "addr.send(amount);\n// comment\nbool ok = true;";
+        assert!(!has_rule(&run_checks(src), "SOL-005"), "bool two lines ahead should suppress SOL-005");
+    }
+
+    /// Sin require ni bool en las 3 líneas → SÍ debe disparar SOL-005.
+    #[test]
+    fn sol005_finding_when_no_check_in_window() {
+        let src = "addr.send(amount);\nbalance -= amount;\nemit Sent();";
+        assert!(has_rule(&run_checks(src), "SOL-005"), "missing check should fire SOL-005");
+    }
+
+    /// require() a 3+ líneas de distancia → SÍ debe disparar SOL-005
+    /// (ventana de solo 2 líneas de look-ahead).
+    #[test]
+    fn sol005_finding_when_require_outside_window() {
+        let src = "addr.send(amount);\nfoo();\nbar();\nrequire(ok);";
+        assert!(has_rule(&run_checks(src), "SOL-005"), "require outside window should still fire SOL-005");
+    }
+
+    // ── RS-003 ────────────────────────────────────────────────────────────────
+
+    /// `/// CHECK:` en la MISMA línea → no debe disparar RS-003.
+    #[test]
+    fn rs003_no_finding_when_check_same_line() {
+        let src = r#"pub foo: UncheckedAccount<'info>, /// CHECK: verified by seeds"#;
+        assert!(!has_rule(&run_checks(src), "RS-003"));
+    }
+
+    /// `/// CHECK:` en la línea ANTERIOR → no debe disparar RS-003.
+    #[test]
+    fn rs003_no_finding_when_check_prev_line() {
+        let src = "/// CHECK: owner validated via seeds\npub foo: UncheckedAccount<'info>,";
+        assert!(!has_rule(&run_checks(src), "RS-003"), "CHECK on prev line should suppress RS-003");
+    }
+
+    /// Sin `/// CHECK:` en ninguna de las dos líneas → SÍ debe disparar RS-003.
+    #[test]
+    fn rs003_finding_when_no_check_comment() {
+        let src = "// some other comment\npub foo: UncheckedAccount<'info>,";
+        assert!(has_rule(&run_checks(src), "RS-003"), "missing CHECK should fire RS-003");
+    }
+
+    /// Primera línea del archivo con UncheckedAccount (i=0, sin línea anterior) → SÍ dispara.
+    #[test]
+    fn rs003_finding_at_first_line() {
+        let src = "pub foo: UncheckedAccount<'info>,";
+        assert!(has_rule(&run_checks(src), "RS-003"));
+    }
 }
 
 fn truncate(s: &str) -> String {

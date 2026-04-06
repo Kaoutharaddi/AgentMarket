@@ -4,6 +4,23 @@ use anchor_lang::solana_program::{instruction::Instruction, program::invoke};
 #[cfg(not(feature = "no-zk"))]
 use solana_program::hash::hashv;
 
+// ── Compile-time guard ────────────────────────────────────────────────────────
+// `no-zk` skips the CPI to the RISC Zero VerifierRouter entirely.
+// It must never be activated without the `testing` feature, which signals
+// conscious localnet use. This fires on any of:
+//   - `anchor build --features no-zk`          (accidental deploy)
+//   - `cargo build-sbf --features no-zk`       (accidental deploy)
+// And is suppressed by:
+//   - `anchor test --features testing`          (correct localnet usage)
+//   - `cargo test --features no-zk`            (unit tests, cfg(test) active)
+#[cfg(all(feature = "no-zk", not(feature = "testing"), not(test)))]
+compile_error!(
+    "Feature 'no-zk' must not be activated directly. \
+     For localnet tests use: anchor test --features testing\n\
+     For devnet/mainnet builds use: anchor build  (no extra flags)\n\
+     Never deploy with 'no-zk' active — it disables all ZK verification."
+);
+
 declare_id!("EyjVnweqSt8fNmnF9ugQMPSzT8sRX57K1SnKRqbsNiTs");
 
 // ── RISC Zero Verifier Router (Devnet) ───────────────────────────────────────
@@ -223,7 +240,9 @@ pub mod agentmarket {
     /// Argumentos:
     ///   seal            — Groth16 proof serializado: 4 bytes selector + 256 bytes proof
     ///   journal_outputs — 132 bytes del AuditJournal commitado por el guest
-    ///   image_id        — AGENT_GUEST_ID del guest (generado por risc0-build)
+    ///
+    /// El image_id no es configurable por el caller: siempre se usa la constante
+    /// AGENT_GUEST_ID hardcodeada en el contrato.
     ///
     /// ⚠️ RISC0_DEV_MODE=1 genera STARK receipts que NO se pueden verificar on-chain.
     ///    Usa Bonsai API para Groth16 en producción.
@@ -231,7 +250,6 @@ pub mod agentmarket {
         ctx:             Context<VerifyAndPay>,
         seal:            Vec<u8>,
         journal_outputs: Vec<u8>,
-        image_id:        [u8; 32],
     ) -> Result<()> {
         require!(
             ctx.accounts.job.status == JobStatus::PendingVerification,
@@ -256,18 +274,13 @@ pub mod agentmarket {
         // Para mainnet: cargo build-sbf --no-default-features (elimina no-zk).
         #[cfg(not(feature = "no-zk"))]
         {
-            // ── 3. Verificar image_id contra el guest autorizado ──────────────
-            require!(
-                image_id == AGENT_GUEST_ID,
-                AgentMarketError::InvalidGuestId
-            );
-
             let journal_digest = hashv(&[journal_outputs.as_slice()]).to_bytes();
 
+            // image_id siempre es la constante hardcodeada — nunca proviene del caller.
             let mut ix_data = Vec::with_capacity(8 + seal.len() + 32 + 32);
             ix_data.extend_from_slice(&VERIFY_DISCRIMINATOR);
             ix_data.extend_from_slice(&seal);
-            ix_data.extend_from_slice(&image_id);
+            ix_data.extend_from_slice(&AGENT_GUEST_ID);
             ix_data.extend_from_slice(&journal_digest);
 
             let ix = Instruction {
@@ -293,7 +306,7 @@ pub mod agentmarket {
         }
 
         #[cfg(feature = "no-zk")]
-        let _ = (&seal, &image_id);
+        let _ = &seal;
 
         // ── 5. Proof válido → pagar al auditor ────────────────────────────────
         let reward = ctx.accounts.job.reward;

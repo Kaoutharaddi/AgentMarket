@@ -48,13 +48,11 @@ class AgentWallet:
         """Dirección pública del agente (base58)."""
         return str(self._keypair.pubkey())
 
-    def sign_and_send(self, transaction) -> str:
+    async def sign_and_send(self, transaction) -> str:
         """
         Firma la transacción y la envía al RPC. Retorna la firma como string.
         transaction: solders.Transaction (debe tener message con blockhash).
         """
-        import asyncio
-
         from anchorpy.provider import AsyncClient, Provider, Wallet
         from solders.transaction import Transaction
 
@@ -66,7 +64,7 @@ class AgentWallet:
             transaction.partial_sign([self._keypair], blockhash)
 
         raw = bytes(transaction)
-        sig = asyncio.run(provider.connection.send_raw_transaction(raw))
+        sig = await provider.connection.send_raw_transaction(raw)
         return str(sig.value)
 
 
@@ -78,6 +76,9 @@ import subprocess
 import tempfile
 from pathlib import Path
 from urllib.parse import urlparse
+
+import docker
+import docker.errors
 
 import httpx
 from job_spec import (
@@ -122,6 +123,18 @@ class JobExecutor:
         raise TypeError(f"Tipo de job no soportado: {type(job_spec)}")
 
     def _execute_code_test(self, job_spec: CodeTestJob) -> bytes:
+        # Docker is mandatory: running untrusted test suites without sandboxing
+        # would allow arbitrary code execution on the host.
+        try:
+            docker_client = docker.from_env()
+            docker_client.ping()
+        except docker.errors.DockerException as exc:
+            raise NotImplementedError(
+                "Docker is required to execute CodeTestJob safely, but the Docker "
+                f"daemon is not available: {exc}. Install Docker and ensure the "
+                "daemon is running before processing CodeTestJob payloads."
+            ) from exc
+
         ipfs_base = "https://ipfs.io/ipfs/"
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -130,8 +143,7 @@ class JobExecutor:
                 inputs_url = job_spec.inputs.ipfs_url.replace("ipfs://", ipfs_base)
                 resp = client.get(inputs_url)
                 resp.raise_for_status()
-                input_path = Path(tmpdir) / "input_data.bin"
-                input_path.write_bytes(resp.content)
+                (Path(tmpdir) / "input_data.bin").write_bytes(resp.content)
 
                 # 2. Descargar test suite
                 suite_url = job_spec.test_suite.ipfs_url.replace("ipfs://", ipfs_base)
@@ -143,22 +155,50 @@ class JobExecutor:
             suite_path = Path(tmpdir) / f"test_suite{suffix}"
             suite_path.write_bytes(resp.content)
 
-            # 3. Ejecutar
+            # 3. Ejecutar dentro de un contenedor Docker desechable y aislado.
+            #
+            # Restricciones de seguridad:
+            #   - network_mode="none"  → sin acceso a red
+            #   - volumen read-only    → el contenedor no puede escribir al host
+            #   - mem_limit / cpu_*    → evita DoS por consumo de recursos
+            #   - timeout de 60 s      → kill automático si el test cuelga
+            container_suite = f"/sandbox/test_suite{suffix}"
             if runner == "pytest":
-                cmd = ["pytest", str(suite_path), "-v", "--tb=short"]
+                image = "python:3.11-slim"
+                cmd = ["pytest", container_suite, "-v", "--tb=short"]
             else:
-                cmd = ["npx", "jest", str(suite_path), "--no-cache", "--silent"]
+                image = "node:20-slim"
+                cmd = ["npx", "jest", container_suite, "--no-cache", "--silent"]
 
-            proc = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=60,
-                cwd=tmpdir,
+            # pids_limit prevents fork-bomb attacks that exhaust host PIDs.
+            container = docker_client.containers.run(
+                image,
+                command=cmd,
+                volumes={str(Path(tmpdir).resolve()): {"bind": "/sandbox", "mode": "ro"}},
+                network_mode="none",
+                mem_limit="256m",
+                cpu_period=100000,
+                cpu_quota=50000,
+                pids_limit=50,
+                detach=True,
             )
-            output = (proc.stdout or "") + (proc.stderr or "")
+            timed_out = False
+            try:
+                container.wait(timeout=60)
+            except Exception:
+                timed_out = True
+                container.kill()
+            finally:
+                # tail=5000 prevents log-flood OOM from malicious print loops.
+                logs: str = container.logs(stdout=True, stderr=True, tail=5000).decode(
+                    "utf-8", errors="replace"
+                )
+                container.remove(force=True)
 
-        return output.encode("utf-8")
+            if timed_out:
+                logs += "\n[sandbox] Container killed: exceeded 60-second timeout."
+
+        return logs.encode("utf-8")
 
     def _execute_audit(self, job_spec: SmartContractAuditJob) -> bytes:
         """Descarga código, ejecuta Slither (Solidity) o cargo-audit (Rust), arma AuditReport."""
@@ -985,7 +1025,6 @@ class AgentBot:
             VERIFY_AND_PAY_DISCRIMINATOR
             + _encode_vec(seal)
             + _encode_vec(journal_outputs)
-            + image_id
         )
 
         ix = Instruction(

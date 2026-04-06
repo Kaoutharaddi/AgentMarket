@@ -43,16 +43,6 @@ describe("agentmarket", () => {
     return journal;
   };
 
-  // IMAGE_ID del guest program (risc-zero-v2/audit_proof.json).
-  // El contrato no lo valida aún (v0.2 roadmap), pero debe ser [u8; 32].
-  // Tipo IDL: array[u8, 32] → se pasa como number[].
-  const IMAGE_ID: number[] = [
-    63, 53, 142, 33, 127,   4,   9, 129,
-   218, 115, 207,   0,  80,  70, 116, 108,
-   208, 106,  12, 176, 200, 160,  69, 183,
-    60, 220, 125, 111, 107,  14, 207, 207,
-  ];
-
   // Seal mínimo para modo no-zk (la CPI al VerifierRouter se omite en localnet).
   // Tipo IDL: bytes → se pasa como Buffer.
   const DEV_SEAL: Buffer = Buffer.from([0, 0, 0, 0]);
@@ -166,7 +156,7 @@ describe("agentmarket", () => {
     const agentBalanceBefore = await provider.connection.getBalance(agent.publicKey);
 
     await program.methods
-      .verifyAndPay(DEV_SEAL, journalOutputs, IMAGE_ID)
+      .verifyAndPay(DEV_SEAL, journalOutputs)
       .accountsPartial({
         job:             jobPda,
         agent:           agent.publicKey,
@@ -225,7 +215,7 @@ describe("agentmarket", () => {
 
     try {
       await program.methods
-        .verifyAndPay(DEV_SEAL, wrongJournalOutputs, IMAGE_ID)
+        .verifyAndPay(DEV_SEAL, wrongJournalOutputs)
         .accountsPartial({
           job:             jobPda,
           agent:           agent.publicKey,
