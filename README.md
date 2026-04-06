@@ -256,10 +256,6 @@ cd agentmarket
 
 ### 2. Build and deploy the Solana program
 
-> **⚠️ IMPORTANTE:** nunca desplegar con `--features no-zk`.
-> Usar siempre `anchor build` sin flags adicionales para devnet/mainnet.
-> El flag `no-zk` desactiva toda la verificación ZK y permite robar el escrow.
-> Para tests en localnet usar: `anchor test --features testing`.
 
 ```bash
 anchor build
